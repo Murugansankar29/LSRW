@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, Clock, CheckCircle, Brain, BookOpen, MessageSquare, Code, Award } from 'lucide-react';
-import { TestResult, CommunicationTest } from '../types';
+import { Trophy, Clock, CheckCircle, Brain, BookOpen, MessageSquare, Code, Award, FileText, Download } from 'lucide-react';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeaderFooterType, PageOrientation } from 'docx';
+import { TestResult, CommunicationTest, Question } from '../types';
+import { FeedbackService } from '../services/feedbackService';
+import { FeedbackScreen } from './FeedbackScreen';
 
 interface ResultsScreenProps {
   quantitativeResult: TestResult;
@@ -9,6 +12,11 @@ interface ResultsScreenProps {
   reasoningResult: TestResult;
   communicationResult: CommunicationTest;
   codingResults: any[];
+  questions?: {
+    quantitative: Question[];
+    verbal: Question[];
+    reasoning: Question[];
+  };
   onRestart: () => void;
 }
 
@@ -18,7 +26,10 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   reasoningResult,
   communicationResult,
   codingResults,
+  questions,
 }) => {
+  const [showFeedback, setShowFeedback] = useState(false);
+
   const totalScore = 
     quantitativeResult.score + 
     verbalResult.score + 
@@ -43,12 +54,40 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
 
   const gradeInfo = getGrade(percentage);
 
+  // Generate feedback using FeedbackService
+  const aptitudeFeedback = questions ? FeedbackService.generateAptitudeFeedback(
+    quantitativeResult,
+    verbalResult,
+    reasoningResult,
+    questions
+  ) : {
+    roundName: 'Aptitude Round',
+    overallPerformance: 'Feedback not available - question data missing.',
+    strengths: ['Completed all sections'],
+    weaknesses: ['Unable to generate detailed analysis'],
+    suggestions: ['Review your performance and practice regularly']
+  };
+
+  const communicationFeedback = FeedbackService.generateCommunicationFeedback(communicationResult);
+  const codingFeedback = FeedbackService.generateCodingFeedback(codingResults);
+
+  if (showFeedback) {
+    return (
+      <FeedbackScreen
+        aptitudeFeedback={aptitudeFeedback}
+        communicationFeedback={communicationFeedback}
+        codingFeedback={codingFeedback}
+        onClose={() => setShowFeedback(false)}
+      />
+    );
+  }
+
   const sections = [
     {
       name: 'Quantitative Aptitude',
       icon: Brain,
       score: quantitativeResult.score,
-      total: 20,
+      total: 15,
       timeSpent: Math.floor(quantitativeResult.timeSpent / 60000),
       color: 'text-blue-400'
     },
@@ -56,7 +95,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
       name: 'Verbal Ability',
       icon: BookOpen,
       score: verbalResult.score,
-      total: 20,
+      total: 15,
       timeSpent: Math.floor(verbalResult.timeSpent / 60000),
       color: 'text-green-400'
     },
@@ -64,7 +103,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
       name: 'Logical Reasoning',
       icon: Brain,
       score: reasoningResult.score,
-      total: 20,
+      total: 15,
       timeSpent: Math.floor(reasoningResult.timeSpent / 60000),
       color: 'text-purple-400'
     }
@@ -77,9 +116,222 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
     { name: 'Writing Test', score: communicationResult.writing.score, total: 10 }
   ];
 
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  const handleDownloadDocx = async () => {
+    try {
+      // Sanitize text for DOCX (remove emojis)
+      const sanitize = (text: string) =>
+        text
+          .replace(/[✅]/g, '')
+          .replace(/[⚠️]/g, '');
+
+      // Helper to create a paragraph
+      const createParagraph = (text: string, bold = false, size = 24, color = '000000', alignment: any = AlignmentType.LEFT) => {
+        return new Paragraph({
+          children: [
+            new TextRun({
+              text: sanitize(text || ''),
+              bold,
+              size,
+              color,
+            }),
+          ],
+          alignment,
+        });
+      };
+
+      // Helper to create a list item paragraph
+      const createListItem = (text: string, color: string = '000000') => {
+        return new Paragraph({
+          children: [
+            new TextRun({
+              text: sanitize(text),
+              size: 24,
+              color: '000000',
+            }),
+          ],
+          bullet: {
+            level: 0,
+          },
+        });
+      };
+
+      // Helper to create a table
+      const createTable = (headers: string[], rows: Array<Array<string | number>>) => {
+        const table = new Table({
+          width: {
+            size: 100,
+            type: WidthType.PERCENTAGE,
+          },
+          rows: [
+            new TableRow({
+              children: headers.map(header => 
+                new TableCell({
+                  children: [createParagraph(header, true, 22, '000000')],
+                  borders: {
+                    top: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+                    bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+                  },
+                })
+              ),
+            }),
+            ...rows.map(row =>
+              new TableRow({
+                children: row.map(cell =>
+                  new TableCell({
+                    children: [createParagraph(String(cell), false, 22, '000000')],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+                    },
+                  })
+                ),
+              })
+            ),
+          ],
+        });
+        return table;
+      };
+
+      // Overall Scoring Summary Table
+      const overallMax = 60 + 30 + 100;
+      const overallPercent = Math.round((totalScore / overallMax) * 100);
+      const overallTableRows = [['Category', 'Score', 'Max', '%'], ['Overall', totalScore, overallMax, `${overallPercent}%`]];
+      const overallTable = createTable(overallTableRows[0], overallTableRows.slice(1));
+
+      // Section-wise Scores Table
+      const sectionRows: Array<Array<string | number>> = [
+        ['Quantitative', sections[0].score, sections[0].total, `${Math.round((sections[0].score/sections[0].total)*1000)/10}%`],
+        ['Verbal', sections[1].score, sections[1].total, `${Math.round((sections[1].score/sections[1].total)*1000)/10}%`],
+        ['Logical Reasoning', sections[2].score, sections[2].total, `${Math.round((sections[2].score/sections[2].total)*1000)/10}%`],
+        ...communicationScores.map(s => [s.name, s.score, s.total, `${Math.round((s.score/s.total)*1000)/10}%`]),
+        ['Coding', codingResults.reduce((s, r) => s + (r.score || 0), 0), 100, `${Math.round((codingResults.reduce((s, r) => s + (r.score || 0), 0)/100)*100)}%`],
+      ];
+      const sectionTable = createTable(['Section', 'Score', 'Max', '%'], sectionRows);
+
+      const roundFeedbacks = [
+        aptitudeFeedback,
+        communicationFeedback,
+        codingFeedback,
+      ];
+
+      const children: any[] = [];
+
+      // Cover Section
+      children.push(createParagraph('Assessment Feedback Report', true, 44, '000000'));
+      children.push(createParagraph(`Date: ${new Date().toLocaleDateString()}`, false, 24, '000000'));
+      const candidateName = 'Candidate Name'; // TODO: replace with actual candidate name if available
+      children.push(createParagraph(`Candidate Name: ${candidateName}`, false, 24, '000000'));
+
+      // Divider (simulated with empty paragraph)
+      children.push(new Paragraph({})); // spacing
+      children.push(overallTable);
+
+      // Section-wise Scores
+      children.push(createParagraph('Section-wise Scores', true, 28, '000000'));
+      children.push(new Paragraph({})); // spacing
+      children.push(sectionTable);
+
+      // Personalized Feedback by Round
+      children.push(createParagraph('Personalized Feedback by Round', true, 28, '000000'));
+      children.push(new Paragraph({})); // spacing
+
+      roundFeedbacks.forEach((rf) => {
+        const safeStrengths = (rf.strengths && rf.strengths.length > 0) ? rf.strengths : ['Completed the round; continue refining skills.'];
+        const safeWeaknesses = (rf.weaknesses && rf.weaknesses.length > 0) ? rf.weaknesses : ['Identify one area to focus on next week.'];
+        const safeSuggestions = (rf.suggestions && rf.suggestions.length > 0) ? rf.suggestions : [
+          'Allocate 30 minutes daily to practice targeted weaknesses.',
+          'Review mistakes and retry similar questions to reinforce learning.'
+        ];
+        const tips = (rf.suggestions && rf.suggestions.length > 0 ? rf.suggestions : safeSuggestions).slice(0, 5);
+        // Round header
+        children.push(createParagraph(rf.roundName, true, 26, '000000'));
+        children.push(new Paragraph({})); // spacing
+
+        // Overall performance paragraph
+        children.push(createParagraph(rf.overallPerformance, false, 24, '000000'));
+
+        // Strengths
+        children.push(createParagraph('Strengths', true, 24, '000000'));
+        safeStrengths.forEach((strength: string) => {
+          children.push(createListItem(strength, '000000'));
+        });
+
+        // Weaknesses / Areas for Improvement
+        children.push(createParagraph('Areas for Improvement', true, 24, '000000'));
+        safeWeaknesses.forEach((weakness: string) => {
+          children.push(createListItem(weakness, '000000'));
+        });
+
+        // Actionable Suggestions
+        children.push(createParagraph('Actionable Suggestions', true, 24, '000000'));
+        safeSuggestions.forEach((suggestion: string) => {
+          children.push(createListItem(suggestion, '000000'));
+        });
+
+        // Tips to enhance knowledge (derived alias of suggestions for DOCX clarity)
+        children.push(createParagraph('Tips to Enhance Knowledge', true, 24, '000000'));
+        tips.forEach((tip: string) => {
+          children.push(createListItem(tip, '000000'));
+        });
+
+        // Divider (spacing)
+        children.push(new Paragraph({})); // spacing
+      });
+
+      const doc = new Document({
+        sections: [{
+          properties: {
+            page: {
+              margin: {
+                top: 720,
+                bottom: 720,
+                left: 720,
+                right: 720,
+              },
+            },
+          },
+          children,
+        }],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const filename = `Assessment_Feedback_${new Date().toISOString().split('T')[0]}.docx`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error generating feedback DOCX:', error);
+      alert('Failed to generate feedback DOCX. Check console for details.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black p-4">
       <div className="max-w-6xl mx-auto">
+        {/* Download Button */}
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={handleDownloadDocx}
+            className="flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition-colors"
+          >
+            <Download className="w-5 h-5" />
+            Download Feedback (DOCX)
+          </button>
+        </div>
+        
+        {/* Results Container with ref */}
+        <div ref={resultsRef}>
         {/* Header */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
@@ -325,10 +577,20 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              onClick={() => setShowFeedback(true)}
+              className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-bold text-lg px-12 py-4 rounded-2xl transition-all duration-300 border border-yellow-400/30 flex items-center gap-3"
+            >
+              <FileText className="w-5 h-5" />
+              View Detailed Feedback
+            </motion.button>
+            
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => {
-                // Future enhancement: Navigate to next step (e.g., interview scheduling, detailed feedback, etc.)
+                // Future enhancement: Navigate to next step (e.g., interview scheduling, certificate generation, etc.)
                 console.log('Next button clicked - Future enhancement placeholder');
-                alert('This feature will be available soon! Future enhancements may include:\n• Detailed performance analysis\n• Interview scheduling\n• Personalized learning recommendations\n• Certificate generation');
+                alert('This feature will be available soon! Future enhancements may include:\n• Interview scheduling\n• Certificate generation\n• Learning path recommendations\n• Progress tracking');
               }}
               className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-bold text-lg px-12 py-4 rounded-2xl transition-all duration-300 border border-blue-400/30"
             >
@@ -337,10 +599,11 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           </div>
           
           <p className="text-yellow-300 text-sm">
-            Thank you for completing the Engineering Graduate Assessment
+            Thank you for completing Assessment 1 • Click "View Detailed Feedback" for personalized improvement suggestions
           </p>
         </motion.div>
       </div>
     </div>
+  </div>
   );
 };

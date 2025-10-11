@@ -53,6 +53,17 @@ export interface CommunicationTest {
   };
 }
 
+export interface FunctionSpecArg {
+  name: string;
+  type: string; // e.g., "number", "number[]", "string"
+}
+
+export interface FunctionSpec {
+  name: string; // function name to implement
+  args: FunctionSpecArg[]; // ordered argument list
+  returnType: string; // e.g., "number", "number[]", "string"
+}
+
 export interface CodingQuestion {
   id: string;
   title: string;
@@ -70,4 +81,5 @@ export interface CodingQuestion {
     expectedOutput: string;
   }>;
   difficulty: 'easy' | 'medium' | 'hard';
+  functionSpec?: FunctionSpec; // optional function spec to auto-generate templates
 }

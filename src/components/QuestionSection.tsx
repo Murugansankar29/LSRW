@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, CheckCircle, ArrowRight } from 'lucide-react';
+import { Clock, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Question, UserAnswer } from '../types';
 
 interface QuestionSectionProps {
@@ -42,8 +42,14 @@ export const QuestionSection: React.FC<QuestionSectionProps> = ({
 
   useEffect(() => {
     setQuestionStartTime(Date.now());
-    setSelectedAnswer('');
-  }, [currentQuestionIndex]);
+    // Load existing answer if going back to a previous question
+    const existingAnswer = answers[currentQuestionIndex];
+    if (existingAnswer) {
+      setSelectedAnswer(String(existingAnswer.answer));
+    } else {
+      setSelectedAnswer('');
+    }
+  }, [currentQuestionIndex, answers]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -64,13 +70,25 @@ export const QuestionSection: React.FC<QuestionSectionProps> = ({
       timeSpent
     };
 
-    const updatedAnswers = [...answers, newAnswer];
+    const updatedAnswers = [...answers];
+    updatedAnswers[currentQuestionIndex] = newAnswer;
     setAnswers(updatedAnswers);
 
     if (currentQuestionIndex === questions.length - 1) {
       handleComplete(updatedAnswers);
     } else {
       setCurrentQuestionIndex(prev => prev + 1);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(prev => prev - 1);
+      // Load the previous answer if it exists
+      const previousAnswer = answers[currentQuestionIndex - 1];
+      if (previousAnswer) {
+        setSelectedAnswer(String(previousAnswer.answer));
+      }
     }
   };
 
@@ -161,8 +179,25 @@ export const QuestionSection: React.FC<QuestionSectionProps> = ({
               ))}
             </div>
 
-            {/* Next Button */}
-            <div className="flex justify-end">
+            {/* Navigation Buttons */}
+            <div className="flex justify-between">
+              {/* Back Button */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handlePrevious}
+                disabled={currentQuestionIndex === 0}
+                className={`px-6 py-3 rounded-xl font-semibold flex items-center gap-3 transition-all duration-200 ${
+                  currentQuestionIndex > 0
+                    ? 'bg-gray-600 hover:bg-gray-500 text-white'
+                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                <ArrowLeft className="w-5 h-5" />
+                Previous
+              </motion.button>
+
+              {/* Next Button */}
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}

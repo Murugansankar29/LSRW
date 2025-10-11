@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const API_KEY = 'AIzaSyBZDiZP-0zndVPQsVhMdbK8NwO5XxCsr10';
+const API_KEY = 'AIzaSyBrJj5wCHb8E-iP5IUlm4zVTDaqpGzK1oc';
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 export class GeminiService {
@@ -100,16 +100,27 @@ export class GeminiService {
   }
 
   async generateCommunicationPrompts() {
-    const prompt = `Generate communication test prompts for engineering graduate interview:
+    const prompt = `Generate communication test prompts for an engineering graduate interview.
     
-    Format as JSON:
+    STRICT RULES FOR speakingSentences:
+    - Provide 5 simple, declarative English sentences.
+    - 6 to 10 words each.
+    - Present simple tense preferred; no commands, no questions.
+    - Do NOT use words like: describe, tell, explain, discuss, talk, why, how, what, should, could, would.
+    - No quotes, no punctuation-heavy constructs, no complex clauses.
+    - Examples of acceptable style: "The server handles requests reliably." "Data travels through secure channels." (Do not reuse these exact sentences.)
+    
+    RULES FOR listeningAudio:
+    - Provide 5 short, clear sentences (6-10 words), simple vocabulary.
+    
+    Format as JSON only:
     {
-      "speakingSentences": ["5 sentences for speaking assessment"],
-      "listeningAudio": ["5 short sentences (8-10 words each) for listening assessment, simple and clear"], 
-      "writingTopic": "A topic for 150-200 word essay relevant to engineering/technology"
+      "speakingSentences": ["..."],
+      "listeningAudio": ["..."],
+      "writingTopic": "..."
     }
     
-    Make content professional and relevant to engineering careers. Ensure listening sentences are very short, clear, and concise.`;
+    Make content professional and relevant to engineering careers. Return ONLY valid JSON.`;
 
     try {
       const result = await this.model.generateContent(prompt);
@@ -118,18 +129,18 @@ export class GeminiService {
     } catch (error) {
       return {
         speakingSentences: [
-          "Technology has revolutionized the way we approach problem-solving.",
-          "Effective communication is crucial for successful project management.",
-          "Innovation requires both technical expertise and creative thinking.",
-          "Collaboration between diverse teams leads to better solutions.",
-          "Continuous learning is essential in the rapidly evolving tech industry."
+          "The system processes data in real time",
+          "Our backend service scales under heavy load",
+          "Clean code improves team productivity",
+          "Engineers document features for future updates",
+          "Automation reduces manual testing effort"
         ],
         listeningAudio: [
-          "Engineers must work together to solve complex problems.",
-          "Technology helps us create better solutions every day.",
-          "Good communication skills are vital for team success.",
-          "Data helps us make smart business choices.",
-          "Innovation drives the future of engineering forward."
+          "Engineers work together on complex problems",
+          "Technology creates better solutions each day",
+          "Clear writing helps the whole team",
+          "Data guides important business decisions",
+          "Innovation drives engineering progress forward"
         ],
         writingTopic: "Discuss the role of emerging technologies in solving environmental challenges. How can engineers contribute to sustainable development?"
       };
@@ -207,7 +218,14 @@ export class GeminiService {
         ],
         "difficulty": "medium|hard",
         "category": "${mediumProblem.category}|${hardProblem.category}",
-        "pattern": "${mediumProblem.pattern}|${hardProblem.pattern}"
+        "pattern": "${mediumProblem.pattern}|${hardProblem.pattern}",
+        "functionSpec": {
+          "name": "lower_snake_case function name capturing the main task (e.g., two_sum, group_anagrams)",
+          "args": [
+            {"name": "arg1", "type": "number|number[]|string|string[]|any"}
+          ],
+          "returnType": "number|number[]|string|string[]|boolean|void"
+        }
       }
     ]
 
@@ -215,7 +233,8 @@ export class GeminiService {
     - Ensure test cases have EXACT expected outputs (no trailing spaces, proper formatting)
     - Include edge cases (empty arrays, single elements, maximum constraints)
     - Make input/output formats crystal clear
-    - Test cases should be comprehensive and cover different scenarios`;
+    - Test cases should be comprehensive and cover different scenarios
+    - The functionSpec should reflect a clean API a candidate would implement (avoid IO in the function).`;
 
     try {
       const result = await this.model.generateContent(prompt);
@@ -300,7 +319,15 @@ export class GeminiService {
           { input: "4\n2 7 11 15\n9", expectedOutput: "0 1" },
           { input: "3\n3 2 4\n6", expectedOutput: "1 2" }
         ],
-        difficulty: "easy"
+        difficulty: "easy",
+        functionSpec: {
+          name: "two_sum",
+          args: [
+            { name: "nums", type: "number[]" },
+            { name: "target", type: "number" }
+          ],
+          returnType: "number[]"
+        }
       },
       {
         title: "Longest Common Subsequence",
@@ -319,7 +346,15 @@ export class GeminiService {
           { input: "abcde\nace", expectedOutput: "3" },
           { input: "abc\ndef", expectedOutput: "0" }
         ],
-        difficulty: "hard"
+        difficulty: "hard",
+        functionSpec: {
+          name: "longest_common_subsequence",
+          args: [
+            { name: "s1", type: "string" },
+            { name: "s2", type: "string" }
+          ],
+          returnType: "number"
+        }
       }
     ];
   }

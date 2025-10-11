@@ -46,6 +46,12 @@ export class SpeechRecognitionService {
   private recognition: SpeechRecognition | null = null;
   private isSupported: boolean;
   private onTranscriptUpdate: ((transcript: string, isFinal: boolean) => void) | null = null;
+  private config = {
+    lang: 'en-IN',
+    maxAlternatives: 3,
+    continuous: true,
+    interimResults: true,
+  };
 
   constructor() {
     // Check for browser support
@@ -60,22 +66,37 @@ export class SpeechRecognitionService {
   private setupRecognition() {
     if (!this.recognition) return;
 
-    this.recognition.continuous = true;
-    this.recognition.interimResults = true;
-    this.recognition.lang = 'en-US';
-    this.recognition.maxAlternatives = 1;
+    this.recognition.continuous = this.config.continuous;
+    this.recognition.interimResults = this.config.interimResults;
+    // Use an accent-friendly default. Adjust if needed.
+    this.recognition.lang = this.config.lang;
+    // Consider multiple alternatives to better handle fast speech and accent variation
+    this.recognition.maxAlternatives = this.config.maxAlternatives;
   }
 
   private finalTranscript = '';
   private interimTranscript = '';
   private isCurrentlyRecording = false;
 
+  // Allow runtime configuration overrides for a session
+  configure(options: Partial<{ lang: string; maxAlternatives: number; continuous: boolean; interimResults: boolean }>) {
+    this.config = { ...this.config, ...options };
+    if (this.recognition) {
+      this.setupRecognition();
+    }
+  }
+
   // New method for live transcription with callback
-  startLiveRecording(onTranscriptUpdate: (transcript: string, isFinal: boolean) => void): Promise<void> {
+  startLiveRecording(onTranscriptUpdate: (transcript: string, isFinal: boolean) => void, options?: Partial<{ lang: string; maxAlternatives: number; continuous: boolean; interimResults: boolean }>): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.recognition || !this.isSupported) {
         reject(new Error('Speech recognition not supported'));
         return;
+      }
+
+      // Apply per-session overrides if provided
+      if (options) {
+        this.configure(options);
       }
 
       this.finalTranscript = '';
@@ -86,13 +107,28 @@ export class SpeechRecognitionService {
       this.recognition.onresult = (event) => {
         let interimTranscript = '';
         let finalTranscript = this.finalTranscript;
+        let lastInterimChunk = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
+          const res = event.results[i];
+          // Choose the alternative with the highest confidence
+          let bestAlt: SpeechRecognitionAlternative | null = null;
+          for (let j = 0; j < res.length; j++) {
+            const alt = res[j];
+            if (!bestAlt || (alt.confidence ?? 0) > (bestAlt.confidence ?? 0)) {
+              bestAlt = alt;
+            }
+          }
+          const bestTranscript = (bestAlt?.transcript || '').trim();
+
+          if (res.isFinal) {
+            if (bestTranscript) finalTranscript += bestTranscript + ' ';
           } else {
-            interimTranscript += transcript;
+            // Avoid repeating the same interim chunk to reduce jitter
+            if (bestTranscript && bestTranscript !== lastInterimChunk) {
+              interimTranscript = bestTranscript;
+              lastInterimChunk = bestTranscript;
+            }
           }
         }
 

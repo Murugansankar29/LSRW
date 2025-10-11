@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, Play, CheckCircle, Code, Terminal, ArrowRight, AlertCircle } from 'lucide-react';
+import { Clock, Play, CheckCircle, Code, Terminal, ArrowRight, AlertCircle, ArrowLeft } from 'lucide-react';
 import { CodingQuestion } from '../types';
 import { ScoringService } from '../services/scoringService';
 import { geminiService } from '../services/geminiService';
@@ -17,7 +17,7 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [code, setCode] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('python');
-  const [timeLeft, setTimeLeft] = useState(30 * 60); // 30 minutes per question
+  const [timeLeft, setTimeLeft] = useState(30 * 60); // Dynamic timer based on question
   const [testResults, setTestResults] = useState<any[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [allSolutions, setAllSolutions] = useState<any[]>([]);
@@ -51,6 +51,16 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
     }
   };
 
+  // Set timer based on current question
+  useEffect(() => {
+    if (questions.length === 0) return;
+    
+    // Set timer: 30 mins for first question, 45 mins for second
+    const questionTime = currentQuestionIndex === 0 ? 30 * 60 : 45 * 60;
+    setTimeLeft(questionTime);
+  }, [currentQuestionIndex, questions.length]);
+
+  // Timer countdown
   useEffect(() => {
     if (questions.length === 0) return;
     
@@ -58,7 +68,7 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
       setTimeLeft((prev) => {
         if (prev <= 1) {
           handleNext();
-          return 30 * 60; // Reset timer for next question
+          return 0;
         }
         return prev - 1;
       });
@@ -73,24 +83,82 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getLanguageTemplate = (language: string) => {
+  const getLanguageTemplate = (language: string, question?: CodingQuestion) => {
+    const spec = question?.functionSpec;
+    const argList = (spec?.args || []).map(a => a.name).join(', ');
+    const pythonFunc = spec
+      ? `def ${spec.name}(${(spec?.args || []).map(a => a.name).join(', ')}):\n    # TODO: implement using ${(spec?.args || []).map(a => a.name).join(', ')}\n    pass\n\n`
+      : '';
+
+    const mapJavaType = (t: string) => {
+      switch (t) {
+        case 'number': return 'int';
+        case 'number[]': return 'int[]';
+        case 'string': return 'String';
+        case 'string[]': return 'String[]';
+        case 'boolean': return 'boolean';
+        case 'boolean[]': return 'boolean[]';
+        case 'void': return 'void';
+        default: return 'Object';
+      }
+    };
+    const getJavaDefaultReturn = (t: string) => {
+      const jt = mapJavaType(t);
+      if (jt === 'void') return '';
+      if (jt === 'int') return '0';
+      if (jt === 'boolean') return 'false';
+      if (jt === 'String') return '""';
+      if (jt === 'int[]') return 'new int[0]';
+      if (jt === 'String[]') return 'new String[0]';
+      if (jt === 'boolean[]') return 'new boolean[0]';
+      return 'null';
+    };
+    const mapCppType = (t: string) => {
+      switch (t) {
+        case 'number': return 'int';
+        case 'number[]': return 'vector<int>';
+        case 'string': return 'string';
+        case 'string[]': return 'vector<string>';
+        case 'boolean': return 'bool';
+        case 'boolean[]': return 'vector<bool>';
+        case 'void': return 'void';
+        default: return 'auto';
+      }
+    };
+    const getCppDefaultReturn = (t: string) => {
+      const ct = mapCppType(t);
+      if (ct === 'int') return '0';
+      if (ct === 'bool') return 'false';
+      if (ct === 'string') return 'string()';
+      if (ct === 'vector<int>') return 'vector<int>()';
+      if (ct === 'vector<string>') return 'vector<string>()';
+      if (ct === 'vector<bool>') return 'vector<bool>()';
+      return '{}';
+    };
+
     switch (language) {
       case 'python':
-        return '# Write your solution here\n\ndef solve():\n    # Your code here\n    pass\n\n# Main execution\nif __name__ == "__main__":\n    solve()';
+        return `# Write your solution here\n\n${pythonFunc}def solve():\n    # Parse input as per the problem's Input Format\n    # args: ${argList || '(define based on input)'}\n    # TODO: parse input and call ${spec ? spec.name : 'your_function'}(...)\n    # Example:\n    # result = ${spec ? `${spec.name}(${argList})` : '...'}\n    # print(result)\n    pass\n\n# Main execution\nif __name__ == "__main__":\n    solve()`;
       case 'java':
-        return 'import java.util.*;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Your code here\n    }\n}';
+        {
+          const fn = spec ? `static ${mapJavaType(spec.returnType)} ${spec.name}(${(spec.args || []).map(a => `${mapJavaType(a.type)} ${a.name}`).join(', ')}) {\n        // TODO: implement\n        ${mapJavaType(spec.returnType) === 'void' ? '' : `return ${getJavaDefaultReturn(spec.returnType)};`}\n    }\n\n` : '';
+          return `import java.util.*;\n\npublic class Solution {\n    ${fn}    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Parse input as per the problem's Input Format\n        // Then call ${spec ? spec.name : "yourFunction"} and print the result\n    }\n}`;
+        }
       case 'cpp':
-        return '#include <iostream>\n#include <vector>\nusing namespace std;\n\nint main() {\n    // Your code here\n    return 0;\n}';
+        {
+          const fn = spec ? `${mapCppType(spec.returnType)} ${spec.name}(${(spec.args || []).map(a => `${mapCppType(a.type)} ${a.name}`).join(', ')}) {\n    // TODO: implement\n    ${mapCppType(spec.returnType) === 'void' ? 'return;' : `return ${getCppDefaultReturn(spec.returnType)};`}\n}\n\n` : '';
+          return `#include <bits/stdc++.h>\nusing namespace std;\n\n${fn}int main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    // Parse input as per the problem's Input Format\n    // Then call ${spec ? spec.name : "your_function"} and output the result\n    return 0;\n}`;
+        }
       case 'c':
-        return '#include <stdio.h>\n#include <stdlib.h>\n\nint main() {\n    // Your code here\n    return 0;\n}';
+        return '#include <stdio.h>\n#include <stdlib.h>\n\n// TODO: Define function based on the problem (signature depends on your parsing)\n\nint main() {\n    // Parse input as per the problem"s Input Format\n    // Call your function and print the result\n    return 0;\n}';
       default:
         return '';
     }
   };
 
   useEffect(() => {
-    setCode(getLanguageTemplate(selectedLanguage));
-  }, [selectedLanguage]);
+    setCode(getLanguageTemplate(selectedLanguage, currentQuestion));
+  }, [selectedLanguage, currentQuestionIndex, questions.length]);
 
   const runCode = async () => {
     if (!currentQuestion) {
@@ -150,17 +218,57 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
       language: selectedLanguage
     };
 
-    const updatedSolutions = [...allSolutions, currentSolution];
+    const updatedSolutions = [...allSolutions];
+    updatedSolutions[currentQuestionIndex] = currentSolution;
     setAllSolutions(updatedSolutions);
 
     if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
-      setCode(getLanguageTemplate(selectedLanguage));
+      setCurrentQuestionIndex(prev => {
+        const next = prev + 1;
+        const nextQ = questions[next];
+        setCode(getLanguageTemplate(selectedLanguage, nextQ));
+        return next;
+      });
       setTestResults([]);
-      setTimeLeft(30 * 60);
+      setError(null);
     } else {
       const scoredResults = ScoringService.scoreCoding(updatedSolutions);
       onComplete(scoredResults);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (currentQuestionIndex > 0) {
+      // Save current solution before going back
+      const currentSolution = {
+        questionIndex: currentQuestionIndex,
+        code,
+        testResults,
+        language: selectedLanguage
+      };
+      
+      const updatedSolutions = [...allSolutions];
+      updatedSolutions[currentQuestionIndex] = currentSolution;
+      setAllSolutions(updatedSolutions);
+      
+      // Go to previous question
+      setCurrentQuestionIndex(prev => {
+        const prevIndex = prev - 1;
+        // Load previous solution if it exists
+        const previousSolution = updatedSolutions[prevIndex];
+        if (previousSolution) {
+          setCode(previousSolution.code);
+          setTestResults(previousSolution.testResults || []);
+          setSelectedLanguage(previousSolution.language);
+        } else {
+          const prevQ = questions[prevIndex];
+          setCode(getLanguageTemplate(selectedLanguage, prevQ));
+          setTestResults([]);
+        }
+        return prevIndex;
+      });
+      
+      setError(null);
     }
   };
 
@@ -216,9 +324,26 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
           className="bg-gray-800/50 backdrop-blur-sm border border-yellow-500/30 rounded-2xl p-6 mb-6"
         >
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-yellow-400">Coding Assessment</h1>
-              <p className="text-yellow-200">Problem {currentQuestionIndex + 1} of {questions.length}</p>
+            <div className="flex items-center gap-4">
+              {/* Back Button */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handlePrevious}
+                disabled={currentQuestionIndex === 0}
+                className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200 ${
+                  currentQuestionIndex > 0
+                    ? 'bg-gray-600 hover:bg-gray-500 text-white'
+                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </motion.button>
+              <div>
+                <h1 className="text-2xl font-bold text-yellow-400">Coding Assessment</h1>
+                <p className="text-yellow-200">Problem {currentQuestionIndex + 1} of {questions.length} • {currentQuestionIndex === 0 ? '30' : '45'} minutes</p>
+              </div>
             </div>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2 text-yellow-300">
@@ -476,7 +601,24 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
             )}
 
             {/* Navigation */}
-            <div className="flex justify-end">
+            <div className="flex justify-between">
+              {/* Previous Button (duplicate for consistency) */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handlePrevious}
+                disabled={currentQuestionIndex === 0}
+                className={`px-6 py-3 rounded-xl font-semibold flex items-center gap-3 transition-all duration-200 ${
+                  currentQuestionIndex > 0
+                    ? 'bg-gray-600 hover:bg-gray-500 text-white'
+                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                <ArrowLeft className="w-5 h-5" />
+                Previous
+              </motion.button>
+              
+              {/* Next Button */}
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}

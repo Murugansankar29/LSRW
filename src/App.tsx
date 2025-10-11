@@ -33,9 +33,9 @@ function App() {
     try {
       // Generate all questions at the start
       const [quantQuestions, verbalQuestions, reasoningQuestions, commPrompts, codingQuestions] = await Promise.all([
-        geminiService.generateQuantitativeQuestions(15),
-        geminiService.generateVerbalQuestions(15),
-        geminiService.generateReasoningQuestions(15),
+        geminiService.generateQuantitativeQuestions(3),
+        geminiService.generateVerbalQuestions(3),
+        geminiService.generateReasoningQuestions(3),
         geminiService.generateCommunicationPrompts(),
         geminiService.generateCodingQuestions()
       ]);
@@ -67,7 +67,7 @@ function App() {
     setQuantitativeResult({
       sectionId: 'quantitative',
       score,
-      totalQuestions: 15,
+      totalQuestions: answers.length,
       timeSpent: totalTime,
       answers
     });
@@ -83,7 +83,7 @@ function App() {
     setVerbalResult({
       sectionId: 'verbal',
       score,
-      totalQuestions: 15,
+      totalQuestions: answers.length,
       timeSpent: totalTime,
       answers
     });
@@ -99,7 +99,7 @@ function App() {
     setReasoningResult({
       sectionId: 'reasoning',
       score,
-      totalQuestions: 15,
+      totalQuestions: answers.length,
       timeSpent: totalTime,
       answers
     });
@@ -201,6 +201,11 @@ function App() {
           reasoningResult={reasoningResult}
           communicationResult={communicationResult}
           codingResults={codingResults}
+          questions={{
+            quantitative: quantitativeQuestions,
+            verbal: verbalQuestions,
+            reasoning: reasoningQuestions,
+          }}
           onRestart={handleRestart}
         />
       )}

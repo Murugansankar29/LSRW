@@ -74,40 +74,36 @@ export class ScoringService {
     let totalScore = 0;
     
     transcripts.forEach((transcript, index) => {
-      if (transcript && expectedTexts[index]) {
-        const similarity = this.calculateTextSimilarity(
-          transcript.toLowerCase().trim(),
-          expectedTexts[index].toLowerCase().trim()
-        );
-        
-        if (similarity > 0.8) totalScore += 1;
-        else if (similarity > 0.6) totalScore += 0.8;
-        else if (similarity > 0.4) totalScore += 0.5;
-        else if (transcript.length > 10) totalScore += 0.2; // At least attempted
+      const hyp = (transcript || '').trim();
+      const ref = (expectedTexts[index] || '').trim();
+      if (hyp && ref) {
+        const acc = this.wordAccuracy(ref, hyp); // 0..1
+        if (acc >= 0.9) totalScore += 1; // near perfect
+        else if (acc >= 0.8) totalScore += 0.8;
+        else if (acc >= 0.65) totalScore += 0.5;
+        else if (hyp.length > 10) totalScore += 0.2; // attempt
       }
     });
     
-    return Math.min(Math.round(totalScore * 10) / 10, 5);
+    return Math.min(Math.round(totalScore), 5);
   }
 
   private static scoreListening(transcripts: string[], expectedTexts: string[]): number {
     let score = 0;
     
     transcripts.forEach((transcript, index) => {
-      if (transcript && expectedTexts[index]) {
-        const similarity = this.calculateTextSimilarity(
-          transcript.toLowerCase().trim(),
-          expectedTexts[index].toLowerCase().trim()
-        );
-        
-        if (similarity > 0.8) score += 1;
-        else if (similarity > 0.6) score += 0.8;
-        else if (similarity > 0.4) score += 0.5;
-        else if (transcript.length > 5) score += 0.2;
+      const hyp = (transcript || '').trim();
+      const ref = (expectedTexts[index] || '').trim();
+      if (hyp && ref) {
+        const acc = this.wordAccuracy(ref, hyp);
+        if (acc >= 0.9) score += 1;
+        else if (acc >= 0.8) score += 0.8;
+        else if (acc >= 0.65) score += 0.5;
+        else if (hyp.length > 5) score += 0.2;
       }
     });
     
-    return Math.min(Math.round(score * 10) / 10, 5);
+    return Math.min(Math.round(score), 5);
   }
 
   private static scoreWriting(essay: string): number {
@@ -132,55 +128,49 @@ export class ScoringService {
     return Math.min(score, 10);
   }
 
-  private static calculateTextSimilarity(text1: string, text2: string): number {
-    const words1 = text1.split(/\s+/).filter(w => w.length > 2);
-    const words2 = text2.split(/\s+/).filter(w => w.length > 2);
-    
-    if (words1.length === 0 || words2.length === 0) return 0;
-    
-    let commonWords = 0;
-    words1.forEach(word1 => {
-      words2.forEach(word2 => {
-        if (word1 === word2) commonWords += 1;
-        else if (word1.includes(word2) || word2.includes(word1)) commonWords += 0.5;
-        else if (this.levenshteinDistance(word1, word2) <= 2) commonWords += 0.3;
-      });
-    });
-    
-    return commonWords / Math.max(words1.length, words2.length);
-  }
-  
-  private static levenshteinDistance(str1: string, str2: string): number {
-    const matrix = [];
-    
-    for (let i = 0; i <= str2.length; i++) {
-      matrix[i] = [i];
-    }
-    
-    for (let j = 0; j <= str1.length; j++) {
-      matrix[0][j] = j;
-    }
-    
-    for (let i = 1; i <= str2.length; i++) {
-      for (let j = 1; j <= str1.length; j++) {
-        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
-          );
-        }
+  // Removed old similarity helpers; replaced by WER-based accuracy
+
+  // Compute Word Error Rate based on Levenshtein distance over tokens
+  private static wordErrorRate(reference: string, hypothesis: string): number {
+    const refTokens = this.normalizeForWER(reference).split(' ').filter(Boolean);
+    const hypTokens = this.normalizeForWER(hypothesis).split(' ').filter(Boolean);
+    if (refTokens.length === 0) return hypTokens.length === 0 ? 0 : 1;
+
+    // DP edit distance at token level
+    const dp: number[][] = Array(refTokens.length + 1).fill(0).map(() => Array(hypTokens.length + 1).fill(0));
+    for (let i = 0; i <= refTokens.length; i++) dp[i][0] = i;
+    for (let j = 0; j <= hypTokens.length; j++) dp[0][j] = j;
+    for (let i = 1; i <= refTokens.length; i++) {
+      for (let j = 1; j <= hypTokens.length; j++) {
+        const cost = refTokens[i - 1] === hypTokens[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,        // deletion
+          dp[i][j - 1] + 1,        // insertion
+          dp[i - 1][j - 1] + cost  // substitution
+        );
       }
     }
-    
-    return matrix[str2.length][str1.length];
+    const wer = dp[refTokens.length][hypTokens.length] / refTokens.length;
+    return Math.min(1, Math.max(0, wer));
+  }
+
+  // Convert WER to accuracy (1 - WER)
+  private static wordAccuracy(reference: string, hypothesis: string): number {
+    return 1 - this.wordErrorRate(reference, hypothesis);
+  }
+
+  // Basic normalization: lowercase, remove punctuation, collapse spaces
+  private static normalizeForWER(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[.,!?;:\-–—\(\)\[\]"'`]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   // Score coding questions
   static scoreCoding(solutions: any[]): any[] {
-    return solutions.map((solution, index) => {
+    return solutions.map((solution) => {
       const testResults = solution.testResults || [];
       const passedTests = testResults.filter((result: any) => result.passed).length;
       const totalTests = testResults.length;
