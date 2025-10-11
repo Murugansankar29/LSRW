@@ -1,4 +1,111 @@
 import React, { useState, useEffect } from 'react';
+// Predefined pool of 100 valid sentences (12-15 words)
+const PREDEFINED_SPEAKING_SENTENCES = [
+  "Effective communication helps teams deliver projects on time and maintain high quality standards throughout development",
+  "Engineers who update their skills regularly can solve complex problems and adapt to new industry trends quickly",
+  "A successful product launch requires careful planning, thorough testing, and clear documentation from every team member",
+  "Collaborative brainstorming sessions often lead to innovative solutions that benefit the entire organization and its goals",
+  "User feedback helps engineers improve software features and address potential issues before they become major obstacles",
+  "Project managers coordinate resources and schedules to ensure that all deliverables are completed within the agreed timeline",
+  "Continuous learning and professional development are essential for engineers to stay competitive in a rapidly changing industry",
+  "Clear documentation allows new team members to understand the system architecture and contribute effectively from the start",
+  "Regular team meetings provide opportunities to discuss progress, address challenges, and celebrate recent achievements together",
+  "Testing software thoroughly before release helps prevent bugs and ensures a positive experience for all end users involved",
+  "Engineers must balance technical requirements with business goals to deliver solutions that meet both user needs and company objectives",
+  "Mentoring junior engineers helps build a strong team culture and accelerates the professional growth of everyone involved",
+  "Effective time management allows engineers to prioritize tasks and meet project deadlines without sacrificing quality or accuracy",
+  "Cross-functional teams bring together diverse skills and perspectives to solve complex problems more efficiently and creatively",
+  "Automating repetitive tasks frees up time for engineers to focus on more challenging and rewarding aspects of their work",
+  "Regular code reviews help maintain high standards, catch potential issues early, and promote knowledge sharing among team members",
+  "Engineers who communicate clearly with stakeholders can better understand requirements and deliver solutions that exceed expectations",
+  "A positive work environment encourages collaboration, innovation, and continuous improvement across all levels of the organization",
+  "Learning from past project experiences helps teams avoid repeating mistakes and improve their processes for future success",
+  "Engineers often use version control systems to track changes, collaborate with others, and maintain a reliable codebase",
+  "Setting clear goals and milestones helps teams measure progress and stay motivated throughout the duration of a project",
+  "Participating in industry conferences and workshops allows engineers to learn about new technologies and best practices",
+  "Effective problem-solving requires both analytical thinking and creativity to develop practical and innovative solutions",
+  "Engineers must consider security and privacy concerns when designing systems that handle sensitive user data or financial information",
+  "Providing constructive feedback helps team members grow professionally and contributes to a culture of continuous improvement",
+  "Engineers who document their work thoroughly make it easier for others to maintain and extend the system in the future",
+  "Collaboration between engineers and designers ensures that products are both functional and visually appealing to end users",
+  "Engineers often participate in code sprints to rapidly develop and test new features for upcoming software releases",
+  "A well-organized workspace can improve focus, productivity, and overall job satisfaction for engineers and other professionals",
+  "Engineers who stay curious and open to new ideas are more likely to drive innovation within their teams and organizations",
+  "Regularly updating project documentation helps keep everyone informed about changes and reduces confusion during development",
+  "Engineers must be adaptable and willing to learn new tools and technologies as industry standards evolve over time",
+  "Participating in peer code reviews helps engineers learn from each other and maintain consistent coding standards",
+  "Engineers who communicate project risks early can help teams develop contingency plans and avoid potential setbacks",
+  "A strong sense of ownership motivates engineers to deliver high-quality work and take pride in their contributions",
+  "Engineers often use agile methodologies to manage projects, prioritize tasks, and respond quickly to changing requirements",
+  "Continuous integration and deployment practices help teams deliver updates to users more frequently and with greater confidence",
+  "Engineers who seek feedback from users can identify areas for improvement and deliver more valuable solutions",
+  "A diverse team brings together unique perspectives that can lead to more creative and effective problem-solving",
+  "Engineers must balance short-term project needs with long-term system maintainability and scalability goals",
+  "Participating in hackathons allows engineers to experiment with new ideas and technologies in a fast-paced environment",
+  "Engineers who mentor others help build a supportive and knowledgeable team culture",
+  "Regularly scheduled breaks can improve focus and prevent burnout during long periods of intense work",
+  "Engineers often collaborate with product managers to define requirements and ensure alignment with business objectives",
+  "A clear project roadmap helps teams stay organized and track progress toward key milestones",
+  "Engineers who embrace change are better equipped to handle unexpected challenges and adapt to new situations",
+  "Effective delegation allows team leads to distribute tasks according to each member's strengths and expertise",
+  "Engineers who participate in open-source projects can learn from others and contribute to the broader technology community",
+  "A strong professional network provides engineers with valuable resources and support throughout their careers",
+  "Engineers who practice active listening can better understand stakeholder needs and deliver more effective solutions",
+  "Regularly updating technical skills helps engineers remain competitive in a rapidly evolving job market",
+  "Engineers who take initiative often identify opportunities for improvement and drive positive change within their teams",
+  "A well-documented onboarding process helps new engineers become productive more quickly and with less frustration",
+  "Engineers who value diversity and inclusion contribute to a more innovative and welcoming workplace",
+  "Participating in team-building activities can strengthen relationships and improve collaboration among engineers",
+  "Engineers who communicate project updates clearly help keep stakeholders informed and engaged throughout development",
+  "A strong focus on quality assurance helps engineers deliver reliable and user-friendly products",
+  "Engineers who are open to feedback can continuously improve their skills and performance over time",
+  "Regularly scheduled team retrospectives provide opportunities to reflect on successes and identify areas for growth",
+  "Engineers who stay organized can manage multiple projects and deadlines more effectively",
+  "A positive attitude helps engineers overcome challenges and maintain motivation during difficult projects",
+  "Engineers who participate in professional organizations can access valuable resources and networking opportunities",
+  "Regularly reviewing project goals helps teams stay aligned and focused on delivering value to users",
+  "Engineers who document lessons learned can help future teams avoid common pitfalls and improve project outcomes",
+  "A strong commitment to ethical standards helps engineers build trust with users and stakeholders",
+  "Engineers who collaborate with cross-functional teams can deliver more comprehensive and effective solutions",
+  "Regularly updating system documentation helps ensure that knowledge is preserved and accessible to all team members",
+  "Engineers who seek out mentorship can accelerate their professional growth and development",
+  "A focus on continuous improvement helps engineers deliver better results with each new project",
+  "Engineers who participate in training programs can learn new skills and stay current with industry trends",
+  "Regularly scheduled one-on-one meetings help managers support the growth and well-being of their engineers",
+  "Engineers who contribute to knowledge sharing help build a stronger and more capable team",
+  "A strong sense of curiosity drives engineers to explore new technologies and approaches",
+  "Engineers who communicate effectively with non-technical stakeholders can bridge gaps and ensure project success",
+  "Regularly updating personal development plans helps engineers set and achieve meaningful career goals",
+  "Engineers who participate in design reviews can help ensure that solutions are both functional and user-friendly",
+  "A commitment to lifelong learning helps engineers remain adaptable and resilient in a changing industry",
+  "Engineers who practice empathy can better understand the needs and perspectives of their colleagues and users",
+  "Regularly scheduled team check-ins help maintain alignment and address issues before they escalate",
+  "Engineers who take responsibility for their work build trust and credibility with their teams",
+  "A focus on user experience helps engineers deliver products that are both effective and enjoyable to use",
+  "Engineers who participate in community events can expand their networks and learn from others in the field",
+  "Regularly updating project timelines helps teams manage expectations and deliver on commitments",
+  "Engineers who embrace feedback can turn challenges into opportunities for growth and improvement",
+  "A strong sense of purpose motivates engineers to pursue excellence in their work",
+  "Engineers who collaborate with external partners can access new resources and expertise",
+  "Regularly reviewing code quality helps maintain high standards and prevent technical debt",
+  "Engineers who participate in brainstorming sessions can generate creative solutions to complex problems",
+  "A commitment to transparency helps engineers build trust with users and stakeholders",
+  "Engineers who stay informed about industry trends can anticipate changes and adapt their strategies accordingly",
+  "Regularly scheduled knowledge sharing sessions help teams stay up to date and aligned",
+  "Engineers who value open communication can resolve conflicts and build stronger working relationships",
+  "A focus on sustainability helps engineers design solutions that are environmentally responsible and efficient",
+  "Engineers who participate in cross-training can develop new skills and increase their versatility",
+  "Regularly updating technical documentation helps ensure that systems are maintainable and scalable",
+  "Engineers who seek out challenging projects can accelerate their learning and career growth",
+  "A strong sense of accountability helps engineers deliver on their commitments and build trust with others",
+  "Engineers who participate in user research can deliver solutions that better meet customer needs",
+  "Regularly scheduled project reviews help teams celebrate successes and identify areas for improvement",
+  "Engineers who practice mindfulness can improve focus, reduce stress, and enhance overall well-being",
+  "A commitment to diversity and inclusion helps engineers create more innovative and effective solutions",
+  "Engineers who participate in technical communities can learn from others and share their own expertise",
+  "Regularly updating skills and certifications helps engineers remain competitive in the job market",
+  "Engineers who communicate project requirements clearly can help ensure successful outcomes for all stakeholders"
+];
 import { motion } from 'framer-motion';
 import { Mic, Square, Clock, FileText, Volume2, ArrowLeft } from 'lucide-react';
 import { CommunicationTest as CommunicationTestType } from '../types';
@@ -64,11 +171,19 @@ export const CommunicationTest: React.FC<CommunicationTestProps> = ({ prompts, o
       .map(s => s.replace(/\s+/g, ' ').trim())
       .filter(s => {
         const wc = s.split(' ').filter(Boolean).length;
-        return wc >= 8 && wc <= 15; // keep moderate length
+  return wc >= 12 && wc <= 15; // allow 12-15 words
       });
   };
 
-  const speakingSentences = React.useMemo(() => sanitizeSpeakingSentences(prompts.speakingSentences), [prompts.speakingSentences]);
+  const speakingSentences = React.useMemo(() => {
+    let sanitized = sanitizeSpeakingSentences(prompts.speakingSentences);
+    if (sanitized.length === 0) {
+      // Randomly select 5 from the predefined pool
+      const shuffled = PREDEFINED_SPEAKING_SENTENCES.sort(() => 0.5 - Math.random());
+      sanitized = shuffled.slice(0, 5);
+    }
+    return sanitized;
+  }, [prompts.speakingSentences]);
 
   // Timer for overall test
   useEffect(() => {
