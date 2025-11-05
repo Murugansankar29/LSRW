@@ -52,6 +52,12 @@ export class SpeechRecognitionService {
     continuous: true,
     interimResults: true,
   };
+  private ws: WebSocket | null = null;
+  private questionIndex: number = 0;
+  private onWSOpen: ((ev: Event) => void) | null = null;
+  private onWSMessage: ((msg: any) => void) | null = null;
+  private onWSClose: ((ev: CloseEvent) => void) | null = null;
+  private onWSError: ((ev: Event) => void) | null = null;
 
   constructor() {
     // Check for browser support
@@ -84,6 +90,63 @@ export class SpeechRecognitionService {
     if (this.recognition) {
       this.setupRecognition();
     }
+  }
+
+  initWebSocket(url: string, handlers?: Partial<{ onopen: (ev: Event) => void; onmessage: (msg: any) => void; onclose: (ev: CloseEvent) => void; onerror: (ev: Event) => void }>) {
+    try {
+      this.ws = new WebSocket(url);
+    } catch (e) {
+      return;
+    }
+    this.onWSOpen = handlers?.onopen || null;
+    this.onWSMessage = handlers?.onmessage || null;
+    this.onWSClose = handlers?.onclose || null;
+    this.onWSError = handlers?.onerror || null;
+    this.ws.onopen = (ev) => {
+      this.onWSOpen?.(ev);
+    };
+    this.ws.onmessage = (ev) => {
+      let msg: any;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg && msg.type === 'question' && typeof msg.text === 'string') {
+        if (typeof msg.index === 'number') this.questionIndex = msg.index;
+        this.speak(String(msg.text));
+      } else if (msg && msg.type === 'complete' && typeof msg.text === 'string') {
+        this.speak(String(msg.text));
+      }
+      this.onWSMessage?.(msg);
+    };
+    this.ws.onclose = (ev) => {
+      this.onWSClose?.(ev);
+    };
+    this.ws.onerror = (ev) => {
+      this.onWSError?.(ev);
+    };
+  }
+
+  disconnectWebSocket() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.close(1000);
+    }
+    this.ws = null;
+  }
+
+  setQuestionIndex(i: number) {
+    this.questionIndex = i;
+  }
+
+  setServerMessageHandler(handler: (msg: any) => void) {
+    this.onWSMessage = handler;
+  }
+
+  speak(text: string) {
+    if (typeof window === 'undefined' || !(window as any).speechSynthesis) return;
+    const u = new (window as any).SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.pitch = 1;
+    u.lang = this.config.lang || 'en-US';
+    (window as any).speechSynthesis.cancel();
+    (window as any).speechSynthesis.speak(u);
   }
 
   // New method for live transcription with callback
@@ -123,11 +186,21 @@ export class SpeechRecognitionService {
 
           if (res.isFinal) {
             if (bestTranscript) finalTranscript += bestTranscript + ' ';
+            if (this.ws && this.ws.readyState === WebSocket.OPEN && bestTranscript) {
+              try {
+                this.ws.send(JSON.stringify({ type: 'asr', mode: 'final', text: bestTranscript, questionIndex: this.questionIndex }));
+              } catch {}
+            }
           } else {
             // Avoid repeating the same interim chunk to reduce jitter
             if (bestTranscript && bestTranscript !== lastInterimChunk) {
               interimTranscript = bestTranscript;
               lastInterimChunk = bestTranscript;
+              if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                try {
+                  this.ws.send(JSON.stringify({ type: 'asr', mode: 'partial', text: bestTranscript, questionIndex: this.questionIndex }));
+                } catch {}
+              }
             }
           }
         }

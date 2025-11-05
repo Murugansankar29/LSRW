@@ -161,6 +161,20 @@ export const CommunicationTest: React.FC<CommunicationTestProps> = ({ prompts, o
   // Error
   const [recordingError, setRecordingError] = useState('');
 
+  useEffect(() => {
+    const WS_URL = (import.meta as any).env?.VITE_WS_URL || `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api/ws`;
+    speechService.initWebSocket(WS_URL, {
+      onmessage: (msg: any) => {
+        if (msg && msg.type === 'question' && typeof msg.index === 'number') {
+          speechService.setQuestionIndex(msg.index);
+        }
+      }
+    });
+    return () => {
+      speechService.disconnectWebSocket();
+    };
+  }, []);
+
   // Sanitize speaking sentences to be simple declarative sentences (runtime guard)
   const sanitizeSpeakingSentences = (sentences: string[]) => {
     const banned = /\b(describe|tell|explain|discuss|talk|why|how|what|should|could|would|please)\b/i;
@@ -184,6 +198,16 @@ export const CommunicationTest: React.FC<CommunicationTestProps> = ({ prompts, o
     }
     return sanitized;
   }, [prompts.speakingSentences]);
+
+  useEffect(() => {
+    if (currentStep === 0) {
+      speechService.setQuestionIndex(0);
+    } else if (currentStep === 1) {
+      speechService.setQuestionIndex(currentSpeakingIndex);
+    } else if (currentStep === 2) {
+      speechService.setQuestionIndex(currentListeningIndex);
+    }
+  }, [currentStep, currentSpeakingIndex, currentListeningIndex]);
 
   // Timer for overall test
   useEffect(() => {

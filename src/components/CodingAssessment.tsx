@@ -5,6 +5,8 @@ import { CodingQuestion } from '../types';
 import { ScoringService } from '../services/scoringService';
 import { geminiService } from '../services/geminiService';
 import { pistonService } from '../services/pistonService';
+import { MonacoEditor } from './MonacoEditor';
+import { generateTemplate } from '../utils/codeTemplates';
 
 interface CodingAssessmentProps {
   questions?: CodingQuestion[];
@@ -16,8 +18,8 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(!propQuestions);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [code, setCode] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState('python');
-  const [timeLeft, setTimeLeft] = useState(30 * 60); // Dynamic timer based on question
+  const [selectedLanguage, setSelectedLanguage] = useState('c');  // Default to C
+  const [timeLeft, setTimeLeft] = useState(30 * 60);
   const [testResults, setTestResults] = useState<any[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [allSolutions, setAllSolutions] = useState<any[]>([]);
@@ -83,82 +85,13 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getLanguageTemplate = (language: string, question?: CodingQuestion) => {
-    const spec = question?.functionSpec;
-    const argList = (spec?.args || []).map(a => a.name).join(', ');
-    const pythonFunc = spec
-      ? `def ${spec.name}(${(spec?.args || []).map(a => a.name).join(', ')}):\n    # TODO: implement using ${(spec?.args || []).map(a => a.name).join(', ')}\n    pass\n\n`
-      : '';
-
-    const mapJavaType = (t: string) => {
-      switch (t) {
-        case 'number': return 'int';
-        case 'number[]': return 'int[]';
-        case 'string': return 'String';
-        case 'string[]': return 'String[]';
-        case 'boolean': return 'boolean';
-        case 'boolean[]': return 'boolean[]';
-        case 'void': return 'void';
-        default: return 'Object';
-      }
-    };
-    const getJavaDefaultReturn = (t: string) => {
-      const jt = mapJavaType(t);
-      if (jt === 'void') return '';
-      if (jt === 'int') return '0';
-      if (jt === 'boolean') return 'false';
-      if (jt === 'String') return '""';
-      if (jt === 'int[]') return 'new int[0]';
-      if (jt === 'String[]') return 'new String[0]';
-      if (jt === 'boolean[]') return 'new boolean[0]';
-      return 'null';
-    };
-    const mapCppType = (t: string) => {
-      switch (t) {
-        case 'number': return 'int';
-        case 'number[]': return 'vector<int>';
-        case 'string': return 'string';
-        case 'string[]': return 'vector<string>';
-        case 'boolean': return 'bool';
-        case 'boolean[]': return 'vector<bool>';
-        case 'void': return 'void';
-        default: return 'auto';
-      }
-    };
-    const getCppDefaultReturn = (t: string) => {
-      const ct = mapCppType(t);
-      if (ct === 'int') return '0';
-      if (ct === 'bool') return 'false';
-      if (ct === 'string') return 'string()';
-      if (ct === 'vector<int>') return 'vector<int>()';
-      if (ct === 'vector<string>') return 'vector<string>()';
-      if (ct === 'vector<bool>') return 'vector<bool>()';
-      return '{}';
-    };
-
-    switch (language) {
-      case 'python':
-        return `# Write your solution here\n\n${pythonFunc}def solve():\n    # Parse input as per the problem's Input Format\n    # args: ${argList || '(define based on input)'}\n    # TODO: parse input and call ${spec ? spec.name : 'your_function'}(...)\n    # Example:\n    # result = ${spec ? `${spec.name}(${argList})` : '...'}\n    # print(result)\n    pass\n\n# Main execution\nif __name__ == "__main__":\n    solve()`;
-      case 'java':
-        {
-          const fn = spec ? `static ${mapJavaType(spec.returnType)} ${spec.name}(${(spec.args || []).map(a => `${mapJavaType(a.type)} ${a.name}`).join(', ')}) {\n        // TODO: implement\n        ${mapJavaType(spec.returnType) === 'void' ? '' : `return ${getJavaDefaultReturn(spec.returnType)};`}\n    }\n\n` : '';
-          return `import java.util.*;\n\npublic class Solution {\n    ${fn}    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Parse input as per the problem's Input Format\n        // Then call ${spec ? spec.name : "yourFunction"} and print the result\n    }\n}`;
-        }
-      case 'cpp':
-        {
-          const fn = spec ? `${mapCppType(spec.returnType)} ${spec.name}(${(spec.args || []).map(a => `${mapCppType(a.type)} ${a.name}`).join(', ')}) {\n    // TODO: implement\n    ${mapCppType(spec.returnType) === 'void' ? 'return;' : `return ${getCppDefaultReturn(spec.returnType)};`}\n}\n\n` : '';
-          return `#include <bits/stdc++.h>\nusing namespace std;\n\n${fn}int main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    // Parse input as per the problem's Input Format\n    // Then call ${spec ? spec.name : "your_function"} and output the result\n    return 0;\n}`;
-        }
-      case 'c':
-        return '#include <stdio.h>\n#include <stdlib.h>\n\n// TODO: Define function based on the problem (signature depends on your parsing)\n\nint main() {\n    // Parse input as per the problem"s Input Format\n    // Call your function and print the result\n    return 0;\n}';
-      default:
-        return '';
-    }
-  };
-
+  // Set initial code template when language or question changes
   useEffect(() => {
-    setCode(getLanguageTemplate(selectedLanguage, currentQuestion));
-  }, [selectedLanguage, currentQuestionIndex, questions.length]);
+    if (currentQuestion) {
+      const template = generateTemplate(selectedLanguage, currentQuestion);
+      setCode(template);
+    }
+  }, [selectedLanguage, currentQuestion]);
 
   const runCode = async () => {
     if (!currentQuestion) {
@@ -226,7 +159,7 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
       setCurrentQuestionIndex(prev => {
         const next = prev + 1;
         const nextQ = questions[next];
-        setCode(getLanguageTemplate(selectedLanguage, nextQ));
+        setCode(generateTemplate(selectedLanguage, nextQ));
         return next;
       });
       setTestResults([]);
@@ -262,7 +195,7 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
           setSelectedLanguage(previousSolution.language);
         } else {
           const prevQ = questions[prevIndex];
-          setCode(getLanguageTemplate(selectedLanguage, prevQ));
+          setCode(generateTemplate(selectedLanguage, prevQ));
           setTestResults([]);
         }
         return prevIndex;
@@ -485,16 +418,10 @@ export const CodingAssessment: React.FC<CodingAssessmentProps> = ({ questions: p
                 </div>
               </div>
               
-              <textarea
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                onPaste={(e) => e.preventDefault()}
-                onCopy={(e) => e.preventDefault()}
-                onCut={(e) => e.preventDefault()}
-                onDrop={(e) => e.preventDefault()}
-                onDragOver={(e) => e.preventDefault()}
-                className="w-full h-96 bg-gray-900 text-yellow-100 font-mono text-sm rounded-lg p-4 border border-yellow-500/30 focus:border-yellow-500 focus:outline-none resize-none"
-                placeholder="Write your solution here... (Copy/Paste disabled)"
+              <MonacoEditor
+                code={code}
+                language={selectedLanguage}
+                onChange={setCode}
               />
             </div>
 

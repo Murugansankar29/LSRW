@@ -1,17 +1,18 @@
-import { UserAnswer, CommunicationTest } from '../types';
+import { UserAnswer, CommunicationTest, Question } from '../types';
 
 export class ScoringService {
   // Score quantitative/verbal/reasoning questions
-  static scoreAptitudeSection(answers: UserAnswer[], questions: any[]): number {
+  static scoreAptitudeSection(answers: UserAnswer[], questions: Question[]): number {
     let score = 0;
-    
-    answers.forEach((answer, index) => {
-      const question = questions[index];
+
+    // Match answers to questions by questionId instead of relying on index order.
+    answers.forEach((answer) => {
+      const question = questions.find((q) => q.id === answer.questionId);
       if (question && answer.answer === question.correctAnswer) {
         score++;
       }
     });
-    
+
     return score;
   }
 
